@@ -421,7 +421,7 @@ class SummarizationModel(object):
     return enc_states, dec_in_state
 
   def decode_onestep(self, sess, batch, latest_tokens, enc_states,
-             dec_init_states, prev_coverage):
+                     dec_init_states, prev_coverage):
     """For beam search decoding. Run the decoder for one step.
 
   Args:
