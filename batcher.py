@@ -49,13 +49,16 @@ class Example(object):
     article_words = article.split()
     if len(article_words) > hps.max_enc_steps:
       article_words = article_words[:hps.max_enc_steps]
-    self.enc_len = len(article_words)  # store the length after truncation but before padding
-    self.enc_input = [vocab.word2id(w) for w in article_words]  # list of word ids; OOVs are represented by the id for UNK token
+    # store the length after truncation but before padding
+    self.enc_len = len(article_words)
+    # list of word ids; OOVs are represented by the id for UNK token
+    self.enc_input = [vocab.word2id(w) for w in article_words]
 
     # Process the abstract
     abstract = ' '.join(abstract_sentences)  # string
     abstract_words = abstract.split()  # list of strings
-    abs_ids = [vocab.word2id(w) for w in abstract_words]  # list of word ids; OOVs are represented by the id for UNK token
+    # list of word ids; OOVs are represented by the id for UNK token
+    abs_ids = [vocab.word2id(w) for w in abstract_words]
 
     # Get the decoder input sequence and target sequence
     self.dec_input, self.target = self.get_dec_inp_targ_seqs(abs_ids,
@@ -68,14 +71,20 @@ class Example(object):
     if hps.pointer_gen:
       # Store a version of the enc_input where in-article OOVs are represented
       # by their temporary OOV id; also store the in-article OOVs words themselves
-      self.enc_input_extend_vocab, self.article_oovs = data.article2ids(article_words, vocab)
+      self.enc_input_extend_vocab, self.article_oovs = data.article2ids(article_words,
+                                                                        vocab)
 
-      # Get a verison of the reference summary where in-article OOVs are represented by their temporary article OOV id
-      abs_ids_extend_vocab = data.abstract2ids(abstract_words, vocab, self.article_oovs)
+      # Get a version of the reference summary where in-article OOVs are
+      # represented by their temporary article OOV id
+      abs_ids_extend_vocab = data.abstract2ids(abstract_words,
+                                               vocab,
+                                               self.article_oovs)
 
       # Overwrite decoder target sequence so it uses the temp article OOV ids
-      _, self.target = self.get_dec_inp_targ_seqs(abs_ids_extend_vocab, hps.max_dec_steps, start_decoding,
-                            stop_decoding)
+      _, self.target = self.get_dec_inp_targ_seqs(abs_ids_extend_vocab,
+                                                  hps.max_dec_steps,
+                                                  start_decoding,
+                                                  stop_decoding)
 
     # Store the original strings
     self.original_article = article
@@ -260,16 +269,17 @@ class Batcher(object):
     self._hps = hps
     self._single_pass = single_pass
 
-    # Initialize a queue of Batches waiting to be used, and a queue of Examples waiting to be batched
+    # Initialize a queue of Batches waiting to be used, and a queue of Examples
+    # waiting to be batched
     self._batch_queue = Queue.Queue(self.BATCH_QUEUE_MAX)
     self._example_queue = Queue.Queue(self.BATCH_QUEUE_MAX * self._hps.batch_size)
 
     # Different settings depending on whether we're in single_pass mode or not
     if single_pass:
-      self._num_example_q_threads = 1  # just one thread, so we read through the dataset just once
+      self._num_example_q_threads = 1  # just one thread, read dataset just once
       self._num_batch_q_threads = 1    # just one thread to batch examples
-      self._bucketing_cache_size = 1   # only load one batch's worth of examples before bucketing; this essentially means no bucketing
-      self._finished_reading = False   # this will tell us when we're finished reading the dataset
+      self._bucketing_cache_size = 1   # this essentially means no bucketing
+      self._finished_reading = False   # tell when finished reading the dataset
     else:
       self._num_example_q_threads = 16  # num threads to fill example queue
       self._num_batch_q_threads = 4  # num threads to fill batch queue
@@ -355,7 +365,8 @@ class Batcher(object):
           inputs.append(self._example_queue.get())
         inputs = sorted(inputs, key=lambda inp: inp.enc_len)  # sort by length of encoder sequence
 
-        # Group the sorted Examples into batches, optionally shuffle the batches, and place in the batch queue.
+        # Group the sorted Examples into batches, optionally shuffle the batches,
+        # and place in the batch queue.
         batches = []
         for i in range(0, len(inputs), self._hps.batch_size):
           batches.append(inputs[i:i + self._hps.batch_size])
@@ -398,12 +409,15 @@ class Batcher(object):
     while True:
       e = next(example_generator)  # e is a tf.Example
       try:
-        article_text = e.features.feature['article'].bytes_list.value[0].decode()  # the article text was saved under the key 'article' in the data files
-        abstract_text = e.features.feature['abstract'].bytes_list.value[0].decode()  # the abstract text was saved under the key 'abstract' in the data files
+        # the article text was saved under the key 'article' in the data files
+        article_text = e.features.feature['article'].bytes_list.value[0].decode()
+        # the abstract text was saved under the key 'abstract' in the data files
+        abstract_text = e.features.feature['abstract'].bytes_list.value[0].decode()
       except ValueError:
         tf.logging.error('Failed to get article or abstract from example')
         continue
-      if len(article_text) == 0:  # See https://github.com/abisee/pointer-generator/issues/1
+      if len(article_text) == 0:
+        # See https://github.com/abisee/pointer-generator/issues/1
         tf.logging.warning('Found an example with empty article text. Skipping it.')
       else:
         yield (article_text, abstract_text)

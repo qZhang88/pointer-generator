@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+# =============================================================================
 
-"""This is the top-level file to train, evaluate or test your summarization model"""
+"""This is the top-level file to train, evaluate or test your summarization
+model"""
 
 import os
 import time
@@ -163,13 +164,14 @@ def setup_training(model, batcher):
         restore_best_model()
     saver = tf.train.Saver(max_to_keep=3)  # keep 3 checkpoints at a time
 
-    sv = tf.train.MonitoredTrainingSession(logdir=train_dir,
+    sv = tf.train.MonitoredTrainingSession(checkpoint_dir=train_dir,
                                            is_chief=True,
                                            saver=saver,
                                            summary_op=None,
                                            save_summaries_secs=60,  # save summaries for tensorboard every 60 secs
                                            save_model_secs=60,  # checkpoint every 60 secs
-                                           global_step=model.global_step)
+                                           global_step=model.global_step,
+                                           config=util.get_config())
     summary_writer = sv.summary_writer
     tf.logging.info("Preparing or waiting for session...")
     sess_context_manager = sv.prepare_or_wait_for_session(config=util.get_config())
@@ -295,8 +297,19 @@ def main(unused_argv):
         raise Exception("The single_pass flag should only be True in decode mode")
 
     # Make a namedtuple hps, containing the values of the hyperparameters that the model needs
-    hparam_list = ['mode', 'lr', 'adagrad_init_acc', 'rand_unif_init_mag', 'trunc_norm_init_std', 'max_grad_norm',
-                   'hidden_dim', 'emb_dim', 'batch_size', 'max_dec_steps', 'max_enc_steps', 'coverage', 'cov_loss_wt',
+    hparam_list = ['mode',
+                   'lr',
+                   'adagrad_init_acc',
+                   'rand_unif_init_mag',
+                   'trunc_norm_init_std',
+                   'max_grad_norm',
+                   'hidden_dim',
+                   'emb_dim',
+                   'batch_size',
+                   'max_dec_steps',
+                   'max_enc_steps',
+                   'coverage',
+                   'cov_loss_wt',
                    'pointer_gen']
     hps_dict = {}
     for key, val in FLAGS.__flags.items():  # for each flag

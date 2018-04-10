@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+# =============================================================================
 
-"""This file contains code to build and run the tensorflow graph for the sequence-to-sequence model"""
+"""This file contains code to build and run the tensorflow graph for the
+sequence-to-sequence model"""
 
 import os
 import time
@@ -35,27 +36,41 @@ class SummarizationModel(object):
     self._vocab = vocab
 
   def _add_placeholders(self):
-    """Add placeholders to the graph. These are entry points for any input data."""
+    """Add placeholders to the graph. These are entry points for any input data.
+    """
     hps = self._hps
 
     # encoder part
-    self._enc_batch = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch')
-    self._enc_lens = tf.placeholder(tf.int32, [hps.batch_size], name='enc_lens')
-    self._enc_padding_mask = tf.placeholder(tf.float32, [hps.batch_size, None], name='enc_padding_mask')
+    self._enc_batch        = tf.placeholder(tf.int32,
+                                            [hps.batch_size, None],
+                                            name='enc_batch')
+    self._enc_lens         = tf.placeholder(tf.int32,
+                                            [hps.batch_size],
+                                            name='enc_lens')
+    self._enc_padding_mask = tf.placeholder(tf.float32,
+                                            [hps.batch_size, None],
+                                            name='enc_padding_mask')
     if FLAGS.pointer_gen:
       self._enc_batch_extend_vocab = tf.placeholder(tf.int32,
                                                     [hps.batch_size, None],
                                                     name='enc_batch_extend_vocab')
-      self._max_art_oovs = tf.placeholder(tf.int32, [], name='max_art_oovs')
+      self._max_art_oovs   = tf.placeholder(tf.int32, [], name='max_art_oovs')
 
     # decoder part
-    self._dec_batch = tf.placeholder(tf.int32, [hps.batch_size, hps.max_dec_steps], name='dec_batch')
-    self._target_batch = tf.placeholder(tf.int32, [hps.batch_size, hps.max_dec_steps], name='target_batch')
-    self._dec_padding_mask = tf.placeholder(tf.float32, [hps.batch_size, hps.max_dec_steps],
-                        name='dec_padding_mask')
+    self._dec_batch        = tf.placeholder(tf.int32,
+                                            [hps.batch_size, hps.max_dec_steps],
+                                            name='dec_batch')
+    self._target_batch     = tf.placeholder(tf.int32,
+                                            [hps.batch_size, hps.max_dec_steps],
+                                            name='target_batch')
+    self._dec_padding_mask = tf.placeholder(tf.float32,
+                                            [hps.batch_size, hps.max_dec_steps],
+                                            name='dec_padding_mask')
 
     if hps.mode == "decode" and hps.coverage:
-      self.prev_coverage = tf.placeholder(tf.float32, [hps.batch_size, None], name='prev_coverage')
+      self.prev_coverage   = tf.placeholder(tf.float32,
+                                            [hps.batch_size, None],
+                                            name='prev_coverage')
 
   def _make_feed_dict(self, batch, just_enc=False):
     """Make a feed dictionary mapping parts of the batch to the appropriate
@@ -87,19 +102,26 @@ class SummarizationModel(object):
 
     Returns:
       encoder_outputs:
-      A tensor of shape [batch_size, <=max_enc_steps, 2*hidden_dim]. It's 2*hidden_dim because it's the concatenation of the forwards and backwards states.
+      A tensor of shape [batch_size, <=max_enc_steps, 2*hidden_dim]. It's
+        2*hidden_dim because it's the concatenation of the forwards and
+        backwards states.
       fw_state, bw_state:
-      Each are LSTMStateTuples of shape ([batch_size,hidden_dim],[batch_size,hidden_dim])
+      Each are LSTMStateTuples of shape ([batch_size,hidden_dim],
+                                         [batch_size,hidden_dim])
     """
     with tf.variable_scope('encoder'):
-      cell_fw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init,
-                        state_is_tuple=True)
-      cell_bw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init,
-                        state_is_tuple=True)
-      (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_inputs,
-                                        dtype=tf.float32,
-                                        sequence_length=seq_len,
-                                        swap_memory=True)
+      cell_fw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim,
+                                        initializer=self.rand_unif_init,
+                                        state_is_tuple=True)
+      cell_bw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim,
+                                        initializer=self.rand_unif_init,
+                                        state_is_tuple=True)
+      (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw,
+                                                                          cell_bw,
+                                                                          encoder_inputs,
+                                                                          dtype=tf.float32,
+                                                                          sequence_length=seq_len,
+                                                                          swap_memory=True)
       encoder_outputs = tf.concat(axis=2, values=encoder_outputs)  # concatenate the forwards and backwards states
     return encoder_outputs, fw_st, bw_st
 
@@ -149,21 +171,23 @@ class SummarizationModel(object):
       coverage:   A tensor, the current coverage vector
     """
     hps = self._hps
-    cell = tf.contrib.rnn.LSTMCell(hps.hidden_dim, state_is_tuple=True, initializer=self.rand_unif_init)
+    cell = tf.contrib.rnn.LSTMCell(hps.hidden_dim,
+                                   state_is_tuple=True,
+                                   initializer=self.rand_unif_init)
 
     # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's
     # coverage vector each time
     prev_coverage = self.prev_coverage if hps.mode == "decode" and hps.coverage else None
 
     outputs, out_state, attn_dists, p_gens, coverage = attention_decoder(inputs,
-                                       self._dec_in_state,
-                                       self._enc_states,
-                                       self._enc_padding_mask,
-                                       cell,
-                                       initial_state_attention=(hps.mode == "decode"),
-                                       pointer_gen=hps.pointer_gen,
-                                       use_coverage=hps.coverage,
-                                       prev_coverage=prev_coverage)
+                                                                         self._dec_in_state,
+                                                                         self._enc_states,
+                                                                         self._enc_padding_mask,
+                                                                         cell,
+                                                                         initial_state_attention=(hps.mode == "decode"),
+                                                                         pointer_gen=hps.pointer_gen,
+                                                                         use_coverage=hps.coverage,
+                                                                         prev_coverage=prev_coverage)
 
     return outputs, out_state, attn_dists, p_gens, coverage
 
@@ -241,14 +265,16 @@ class SummarizationModel(object):
     with tf.variable_scope('seq2seq'):
       # Some initializers
       self.rand_unif_init = tf.random_uniform_initializer(-hps.rand_unif_init_mag,
-                                hps.rand_unif_init_mag,
-                                seed=123)
+                                                          hps.rand_unif_init_mag,
+                                                          seed=123)
       self.trunc_norm_init = tf.truncated_normal_initializer(stddev=hps.trunc_norm_init_std)
 
       # Add embedding matrix (shared by the encoder and decoder inputs)
       with tf.variable_scope('embedding'):
-        embedding = tf.get_variable('embedding', [vsize, hps.emb_dim], dtype=tf.float32,
-                      initializer=self.trunc_norm_init)
+        embedding = tf.get_variable('embedding',
+                                    [vsize, hps.emb_dim],
+                                    dtype=tf.float32,
+                                    initializer=self.trunc_norm_init)
         # add to tensorboard
         if hps.mode == "train": self._add_emb_vis(embedding)
         # tensor with shape (batch_size, max_enc_steps, emb_size)
@@ -389,7 +415,8 @@ class SummarizationModel(object):
     return sess.run(to_return, feed_dict)
 
   def run_eval_step(self, sess, batch):
-    """Runs one evaluation iteration. Returns a dictionary containing summaries, loss, global_step and (optionally) coverage loss."""
+    """Runs one evaluation iteration. Returns a dictionary containing summaries,
+    loss, global_step and (optionally) coverage loss."""
     feed_dict = self._make_feed_dict(batch)
     to_return = {
       'summaries': self._summaries,
@@ -415,8 +442,10 @@ class SummarizationModel(object):
     (enc_states, dec_in_state, global_step) = sess.run([self._enc_states, self._dec_in_state, self.global_step],
                                feed_dict)  # run the encoder
 
-    # dec_in_state is LSTMStateTuple shape ([batch_size,hidden_dim],[batch_size,hidden_dim])
-    # Given that the batch is a single example repeated, dec_in_state is identical across the batch so we just take the top row.
+    # dec_in_state is LSTMStateTuple shape
+    # ([batch_size,hidden_dim],[batch_size,hidden_dim])
+    # Given that the batch is a single example repeated, dec_in_state is
+    # identical across the batch so we just take the top row.
     dec_in_state = tf.contrib.rnn.LSTMStateTuple(dec_in_state.c[0], dec_in_state.h[0])
     return enc_states, dec_in_state
 
@@ -522,7 +551,8 @@ def _coverage_loss(attn_dists, padding_mask):
   """Calculates the coverage loss from the attention distributions.
 
   Args:
-    attn_dists: The attention distributions for each decoder timestep. A list length max_dec_steps containing shape (batch_size, attn_length)
+    attn_dists: The attention distributions for each decoder timestep. A list
+      length max_dec_steps containing shape (batch_size, attn_length)
     padding_mask: shape (batch_size, max_dec_steps).
 
   Returns:
